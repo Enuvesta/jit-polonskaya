@@ -10,6 +10,7 @@ struct re2jit::native{
 		ssize_t len = _prog->size();
 
 		const char* p = text.data();
+		const char* end = p + text.size() + 1;
 
 		
 		//ssize_t text_len = text.size;
@@ -29,9 +30,8 @@ struct re2jit::native{
 		std::stack<int> stk;
 		runq.push_back(i);
 
-		while(1) {
-			++p;
-			while(!runq.empty()){
+		while(p != end) {
+			 {
 				//step
 				nextq.clear();
 				visit.clear();
@@ -40,7 +40,7 @@ struct re2jit::native{
 					while(!stk.empty()) {
 						int i = stk.top();
 						stk.pop();
-						if(std::find(visit.begin(), visit.end(), i) == visit.end()){
+						if(std::find(visit.begin(), visit.end(), i) != visit.end()){
 							continue;
 						}
 						visit.push_back(i);
@@ -52,18 +52,23 @@ struct re2jit::native{
 							case re2::kInstAlt:
 								stk.push(op->out1());
 								stk.push(op->out());
+								break;
 
 							case re2::kInstByteRange:
-								if(op->Matches(*p)){
+								if(p != end - 1 && op->Matches(*p)){
 									nextq.push_back(op->out());
 								}
+								break;
 							case re2::kInstCapture:
+								//return false;
 								// нужно записать, что здесь начинается/заканчивается группа
 								// op->cap() -- 2 * n для n-й открывающей скобки
 								//              2 * n + 1 для закрывающей
 								// op->out() -- когда отметили, переходим сюда
 
 							case re2::kInstEmptyWidth:
+								stk.push(op->out());
+								break;
 								// нужно проверить флаги состояния
 								// op->empty() -- какие должны быть выставлены
 								//                это побитовое "или" констант:
@@ -77,6 +82,7 @@ struct re2jit::native{
 
 							case re2::kInstNop:
 								stk.push(op->out());
+								break;
 
 							case re2::kInstMatch:
 								return true;
@@ -88,10 +94,10 @@ struct re2jit::native{
 					}
 				}
 				//end of step
-				swap(nextq, runq);
-				nextq.clear();
 			}
-			break;
+			swap(nextq, runq);
+			nextq.clear();
+			++p;
 		}   
 		return false;
 	}
