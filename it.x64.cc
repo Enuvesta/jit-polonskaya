@@ -11,7 +11,12 @@ bool CheckMatched(char p, re2::Prog::Inst* op) {
 }
 
 bool visit(char p, int i, int** visited){
-    if()
+    if(*(*visited + i)){
+        return true;
+    } else{
+        (*(*visited + i))++;
+        return false;
+    }
 }
 
 struct re2jit::native
@@ -63,25 +68,26 @@ struct re2jit::native
     // rsi - конец следующей очереди тредов nextq
     // rdx - указатель на массив посещенных вершин
         as::code code;
-        as::label fail, succeed;
+        as::label fail, succeed, proceed;
 
         int n = prog->size();
         std::vector<as::label> labels(n);
         int start_off = -1;
+        code.mark(proceed);
         for (int i = 0; i < n; i++) {
             if (i == prog->start()) {
                 start_off = code.size();
             }
-            .push(as::rdi)
-            .push(as::rsi)
-            .mov(as::i32(i), rsi)
-            .push(as::rdx)
-            .call(visit)
-            .pop(as::rdx)
-            .pop(as::rsi)
-            .pop(as::rdi)
-            // .cmp(as::i8(0), as::rdx + i32(i))
-            // .jmp(,as::equal)
+            code.push(as::rdi)
+                .push(as::rsi)
+                .mov(as::i32(i), as::rsi)
+                .push(as::rdx)
+                .call(visit)
+                .pop(as::rdx)
+                .pop(as::rsi)
+                .pop(as::rdi)
+                .cmp(as::i32(0), as::eax)
+                .jmp(proceed, as::zero);
             auto op = prog->inst(i);
             code.mark(labels[i]);
             switch(op->opcode()){
@@ -106,8 +112,8 @@ struct re2jit::native
                         .pop(as::rdx)
                         .pop(as::rsi)
                         .pop(as::rdi)
-                        .cmp(as::i8(0), as::eax)
-                        .jmp(fail, as::zero)
+                        .test(as::i8(0), as::eax)
+                        .jmp(fail, as::not_equal)
                         .jmp(labels[op->out()])
                         .mov(as::i32(op->out()), as::rdx)
                         .add(as::i8(), as::rdx)
@@ -124,7 +130,7 @@ struct re2jit::native
                     code.jmp(labels[op->out()]);
                     break;
                 case re2::kInstMatch:
-                    code.mov(as::i8(1), as::eax)
+                    code.mov(as::i32(1), as::eax)
                         .ret();
                     break;
                 case re2::kInstFail:
@@ -179,7 +185,7 @@ struct re2jit::native
         std::vector<jit_state_ptr> table(_prog->size(), 0);
         std::vector<jit_state_ptr> threads0(2 * _prog->size(), 0);
         std::vector<jit_state_ptr> threads1(2 * _prog->size(), 0);
-        std::vector<int> visited(_prog->size());
+        std::vector<int> visited(_prog->size(), 0);
         //std::cerr << "HERE: " << text << std::endl;
         jit_state_ptr* begin0 = &threads0[0];
         jit_state_ptr* begin1 = &threads1[0];
