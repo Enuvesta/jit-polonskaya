@@ -116,7 +116,7 @@ struct re2jit::native
                         .jmp(fail, as::not_equal)
                         .jmp(labels[op->out()])
                         .mov(as::i32(op->out()), as::rdx)
-                        .add(as::i8(), as::rdx)
+                        .add(as::i8(8), as::rdx)
                         .ret();
                     break;                
 
